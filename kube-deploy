@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 import os
 import sys
-from subprocess import Popen, PIPE, call
+import subprocess
 #getting the current directory will be important to remove cloned repository.
 CURRENT_DIRECTORY = os.getcwd()
 MICRO_DEPLOYMENT_SCRIPTS_REPOSITORY = "git@github.com:andela/micro-deployment-scripts.git"
 STAGING_CONTEXT = "gke_microservices-kube_us-east1-c_staging"
 PRODUCTION_CONTEXT = "gke_andela-kube_us-east1-b_andela-prod"
+FRONT_END_APPS = ["fis", "allocation", "admin", "pulse-front", "skilltree", "portal", "kaizen", "portal", "vof"]
 def usage():
     pass
 def check_space():
@@ -16,31 +17,28 @@ def get_users_current_kubectl_context():
     pass
 def generate_scripts(environment, micro_service):
     # CLone repository
-    call(['/usr/bin/git', 'clone', MICRO_DEPLOYMENT_SCRIPTS_REPOSITORY])
+    os.system("/usr/bin/git clone {}".format(MICRO_DEPLOYMENT_SCRIPTS_REPOSITORY))
     os.chdir("micro-deployment-scripts")
     os.system("pwd")
     #checkout develop branch of repository
-    call(['/usr/bin/git', 'chcekout', 'develop'])
-    generated_scrits = lambda: call (["./gen_services.sh",  "{}".format(environment), "{}".format(micro_service)])
-    print generated_scrits()
-    if generated_scrits() == 1:
-        #check that maybe its a front-end app
-        print "true"
+    os.system("/usr/bin/git checkout develop")
+    if micro_service in FRONT_END_APPS:
         os.chdir("apps")
         os.system("pwd")
-        generated_apps = lambda: call (["./gen_apps.sh", "{}".format(environment), "{}".format(micro_service)])
-        if generated_apps == 1:
-            print "Could not generate script. Please try again"
-            sys.exit()
-    if environment == "staging":
-        #connect to staging kubectl context
-        call (["kubectl", "config", "use-context", "{}".format(STAGING_CONTEXT )])
-        #generate stating script for specified micro-servcie
-        call (["kubectl", "get", "deployments/{}".format(micro_service), "-o", "yaml", ">" , " {}.yaml".format(environment, micro_service)])
+        os.system("./gen_apps.sh {} {}".format(environment, micro_service))
     else:
-        call (["kubectl", "config", "use-context", {}.format(PRODUCTION_CONTEXT )])
-        call (["kubectl", "get", "deployments/{}".format(micro_service), "-o", "yaml", ">" , "{}.yaml".format(environment, micro_service)])
+        os.system("./gen_services.sh {} {}".format(environment, micro_service))
 
+    if environment == "staging":
+        #user will have to have credentials to access the said context.
+        #connect to staging kubectl context
+        os.system("kubectl config use-context {}".format(STAGING_CONTEXT ))
+        #generate script for specified micro-service in the working directory (kubernetes-deployment-automation)
+        os.system("kubectl get deployments/{} -o yaml > {}/{}.yaml".format(micro_service, CURRENT_DIRECTORY, micro_service))
+    else:
+        os.system ("kubectl config use-context", {}.format(PRODUCTION_CONTEXT ))
+        os.system ("kubectl get deployments/{} -o yaml > {}/{}.yaml".format(micro_service, CURRENT_DIRECTORY, micro_service))
+    # deploy()
 def compare():
     # Use conversions from yaml to dictionaries and others to compare the two files 
     #if differences, call the differences shower.differences
@@ -53,7 +51,15 @@ def differences_show():
     pass
 
 def deploy():
-    #connect to specified environment cluster and apply the deploymente
+    #add command to apply deployment
+    #cleanup
+    #cleanup()
+    pass
+
+def cleanup():
+    os.chdir(CURRENT_DIRECTORY)
+    os.system("pwd")
+    os.system("rm -rf micro-deployment-scripts")
     pass
 
 if __name__ == '__main__':
