@@ -2,19 +2,25 @@
 import os
 import sys
 import subprocess
+
+
 #getting the current directory will be important to remove cloned repository.
 CURRENT_DIRECTORY = os.getcwd()
 MICRO_DEPLOYMENT_SCRIPTS_REPOSITORY = "git@github.com:andela/micro-deployment-scripts.git"
 STAGING_CONTEXT = "gke_microservices-kube_us-east1-c_staging"
 PRODUCTION_CONTEXT = "gke_andela-kube_us-east1-b_andela-prod"
 FRONT_END_APPS = ["fis", "allocation", "admin", "pulse-front", "skilltree", "portal", "kaizen", "portal", "vof"]
+
 def usage():
     pass
+
 def check_space():
     #once the script is initialised, check if user has enough space to use tool.
     pass
+
 def get_users_current_kubectl_context():
     pass
+
 def generate_scripts(environment, micro_service):
     # CLone repository
     os.system("/usr/bin/git clone {}".format(MICRO_DEPLOYMENT_SCRIPTS_REPOSITORY))
@@ -39,6 +45,7 @@ def generate_scripts(environment, micro_service):
         os.system ("kubectl config use-context", {}.format(PRODUCTION_CONTEXT ))
         os.system ("kubectl get deployments/{} -o yaml > {}/{}.yaml".format(micro_service, CURRENT_DIRECTORY, micro_service))
     # deploy()
+    
 def compare():
     # Use conversions from yaml to dictionaries and others to compare the two files 
     #if differences, call the differences shower.differences
