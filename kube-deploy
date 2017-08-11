@@ -2,6 +2,8 @@
 import os
 import sys
 import subprocess
+import yaml
+import pprint
 
 
 #getting the current directory will be important to remove cloned repository.
@@ -9,20 +11,27 @@ CURRENT_DIRECTORY = os.getcwd()
 MICRO_DEPLOYMENT_SCRIPTS_REPOSITORY = "git@github.com:andela/micro-deployment-scripts.git"
 STAGING_CONTEXT = "gke_microservices-kube_us-east1-c_staging"
 PRODUCTION_CONTEXT = "gke_andela-kube_us-east1-b_andela-prod"
-FRONT_END_APPS = ["fis", "allocation", "admin", "pulse-front", "skilltree", "portal", "kaizen", "portal", "vof"]
-
+FRONT_END_APPS = ["fis", "allocation", "admin", "pulse-front", "skilltree", "portal", "kaizen", 
+"portal", "vof"]
+LOCAL_SCRIPT_FOLDER_PATH = ""
+DIFFERENCES = False
+pp = pprint.PrettyPrinter()
 def usage():
     pass
 
+
 def check_space():
-    #once the script is initialised, check if user has enough space to use tool.
+    # once the script is initialised, check if user has enough space to use tool.
     pass
+
 
 def get_users_current_kubectl_context():
     pass
 
+
 def generate_scripts(environment, micro_service):
     # CLone repository
+    global LOCAL_SCRIPT_FOLDER_PATH
     os.system("/usr/bin/git clone {}".format(MICRO_DEPLOYMENT_SCRIPTS_REPOSITORY))
     os.chdir("micro-deployment-scripts")
     os.system("pwd")
@@ -32,44 +41,78 @@ def generate_scripts(environment, micro_service):
         os.chdir("apps")
         os.system("pwd")
         os.system("./gen_apps.sh {} {}".format(environment, micro_service))
+        LOCAL_SCRIPT_FOLDER_PATH = os.getcwd() + "/{}/{}-svc/2_kube_deployment.yaml".format(environment, micro_service)
     else:
         os.system("./gen_services.sh {} {}".format(environment, micro_service))
-
+        LOCAL_SCRIPT_FOLDER_PATH = os.getcwd() + "/services/{}/{}-svc/2_kube_deployment.yaml".format(environment, micro_service)
     if environment == "staging":
-        #user will have to have credentials to access the said context.
-        #connect to staging kubectl context
-        os.system("kubectl config use-context {}".format(STAGING_CONTEXT ))
         #generate script for specified micro-service in the working directory (kubernetes-deployment-automation)
-        os.system("kubectl get deployments/{} -o yaml > {}/{}.yaml".format(micro_service, CURRENT_DIRECTORY, micro_service))
+        os.system("kubectl get --context={} deployments/{} -o yaml > {}/{}.yaml".format(STAGING_CONTEXT, micro_service, CURRENT_DIRECTORY, micro_service))
     else:
-        os.system ("kubectl config use-context", {}.format(PRODUCTION_CONTEXT ))
-        os.system ("kubectl get deployments/{} -o yaml > {}/{}.yaml".format(micro_service, CURRENT_DIRECTORY, micro_service))
-    # deploy()
-    
-def compare():
-    # Use conversions from yaml to dictionaries and others to compare the two files 
-    #if differences, call the differences shower.differences
-    #if no differences then call the deploy function.
-    pass
+        os.system ("kubectl get --context={} deployments/{} -o yaml > {}/{}.yaml".format(PRODUCTION_CONTEXT, micro_service, CURRENT_DIRECTORY, micro_service))
+    GCLOUD_PROJECT_CONFIG_FILE = CURRENT_DIRECTORY + "/{}.yaml".format(micro_service)
+    compare(LOCAL_SCRIPT_FOLDER_PATH, GCLOUD_PROJECT_CONFIG_FILE)
 
-def differences_show():
-    #would you like to cintinue? if yes?
-    #call the deploy function
-    pass
 
-def deploy():
-    #add command to apply deployment
-    #cleanup
-    #cleanup()
-    pass
+def compare(local_script, gcloud_script):
+    #transform the yaml into a python dictionay
+    with open(local_script, "r") as local_script:
+        config_dictionary = yaml.load(local_script)
+    with open(gcloud_script, "r") as gcloud_script:
+        gcloud_config_dictionary = yaml.load(gcloud_script)
+    # for key in gcloud config spec if key in config metadata check that the length of the 
+    for key, value in gcloud_config_dictionary["spec"].iteritems():
+        if key in config_dictionary["metadata"].keys():
+            if value != config_dictionary["metadata"][key]:
+                print "The following differences have been found"
+                print "On Gcloud:"
+                pp.pprint(value)
+                print ""
+                print "In the generated file."
+                pp.pprint (config_dictionary["metadata"][key])
+                print "=========================================================="
+                DIFFERENCES = True
+        else:
+            print "Google cloud configuration contains the following sections that are not in your generated deployment file: "
+            pp.pprint(gcloud_config_dictionary["spec"][key])
+            DIFFERENCES = True
+    for key, value in config_dictionary["metadata"].iteritems():
+        if key not in gcloud_config_dictionary["spec"].keys():
+            print "The following fields are in the generated file but not on google cloud."
+            pp.pprint (config_dictionary["metadata"][key])
+            DIFFERENCES = True
+    choice = differences_show(DIFFERENCES)
+    if choice == 1:
+        deploy(LOCAL_SCRIPT_FOLDER_PATH)
+    else:
+        print "Invalid choice."
+        differences_show(DIFFERENCES)
+
+def differences_show(DIFFERENCES):
+    if DIFFERENCES == False:
+        choice = input("Configuration matches. Press 1 to proceeding to deployment: ")
+        deploy (LOCAL_SCRIPT_FOLDER_PATH)
+    else:
+        choice = input("Configuration Does not. Please exit and solve dicrepancies. If however you would like to continue to deployment despite of the differences in configuration press '1': ")
+    return choice
+
+
+def deploy(path_to_script):
+    print "Applying {}".format(LOCAL_SCRIPT_FOLDER_PATH)
+    #os.system("kubectl apply -f {}".format(LOCAL_SCRIPT_FOLDER_PATH))
+    cleanup()
+
 
 def cleanup():
+    print "Cleaning up ..."
     os.chdir(CURRENT_DIRECTORY)
     os.system("pwd")
     os.system("rm -rf micro-deployment-scripts")
-    pass
+    os.system("rm {}.yaml".format(micro_service))
+
 
 if __name__ == '__main__':
-    micro_service =  sys.argv[2:][0]
-    environment =  sys.argv[3:][0]
+    micro_service = sys.argv[2:][0]
+    environment = sys.argv[3:][0]
     generate_scripts(environment, micro_service)
+    # add a way to just call cleanup if user did not complete deployment.
